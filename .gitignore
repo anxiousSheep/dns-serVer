@@ -1,0 +1,23 @@
+# ---- 构建产物 ----
+build/
+cmake-build-*/
+*.exe
+*.obj
+*.o
+*.a
+*.so
+*.dll
+*.log
+build_err.txt
+
+# ---- IDE ----
+.idea/
+.vscode/
+*.iml
+
+# ---- Claude 相关（个人练习项目，不提交）----
+.claude/
+CLAUDE.md
+
+# ---- 测试结果（不提交）----
+TEST_REPORT.md
