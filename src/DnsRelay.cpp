@@ -43,7 +43,7 @@ bool DnsRelay::submit(const uint8_t* buffer, int len,
 
     cleanupStale();
 
-    int slot = _M_findFreeSlot();
+    int slot = findFreeSlot();
     if (slot < 0) {
         pthread_mutex_unlock(&lock);
         Logger::error("DnsRelay::submit: pending table full (%d entries)", PENDING_SIZE);
@@ -98,7 +98,7 @@ PendingQuery DnsRelay::processResponse(uint8_t* response, int* respLen) {
 
     pthread_mutex_lock(&lock);
 
-    int idx = _M_findByLocalId(localId);
+    int idx = findByLocalId(localId);
     if (idx < 0) {
         pthread_mutex_unlock(&lock);
         Logger::debug("DnsRelay::processResponse: no pending query for localId=%u (stale?)", localId);
@@ -136,14 +136,14 @@ void DnsRelay::cleanupStale() {
     }
 }
 
-int DnsRelay::_M_findFreeSlot() {
+int DnsRelay::findFreeSlot() {
     for (int i = 0; i < PENDING_SIZE; i++) {
         if (!pending[i].used) return i;
     }
     return -1;
 }
 
-int DnsRelay::_M_findByLocalId(uint16_t localId) {
+int DnsRelay::findByLocalId(uint16_t localId) {
     for (int i = 0; i < PENDING_SIZE; i++) {
         if (pending[i].used && pending[i].localId == localId) return i;
     }

@@ -74,16 +74,16 @@ private:
     static int         debugLevel_;
 
     // 格式化一条日志到 entry
-    static LogEntry* _M_createEntry(int level, const char* fmt, va_list args);
+    static LogEntry* createEntry(int level, const char* fmt, va_list args);
 
     // 同步日志（异步未初始化时的 fallback）
-    static void _M_logSync(int level, const char* fmt, va_list args);
+    static void logSync(int level, const char* fmt, va_list args);
 
     // 消费者循环（线程池任务函数）
-    static void _M_consumerLoop(void* arg);
+    static void consumerLoop(void* arg);
 
     // 从队列取消息并串行输出
-    static void _M_drain();
+    static void drain();
 };
 
 } // namespace dns

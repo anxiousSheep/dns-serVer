@@ -1,9 +1,21 @@
 # dns-server-cpp
 
-一个**零 STL、全手写**的 C++ DNS 中继服务器。
+一个**核心组件全手写（零 STL 容器/智能指针）**的 C++ DNS 中继服务器。
 
-> ⚠️ **个人练习项目**：本项目仅用于学习 C++ 底层组件（容器 / 内存管理 / 并发 / 网络 / 协议），
-> **不面向生产环境**，请勿用于正式 DNS 解析服务。
+> 本项目为**学习与面试展示**用途：手写 C++ 底层组件（容器 / 内存管理 / 并发 / 网络 / 协议），
+> 不面向生产环境，请勿用于正式 DNS 解析服务。
+
+## 技术亮点
+
+- **手写容器与内存管理**：`Vector`（三指针布局 + 二倍扩容 + placement new + 移动语义）、
+  `String`（SSO 小字符串优化，14 字节内栈上存储，DNS 域名标签命中率高）、
+  `LinkedHashMap`（哈希桶 + 双向链表，O(1) 查找 + LRU 淘汰，复现 Java `LinkedHashMap`）。
+- **手写智能指针**：`UniquePtr` / `SharedPtr`（引用计数、copy-and-swap、移动语义），复现 `shared_ptr` 六大函数。
+- **手写线程池**：核心 / 非核心线程、阻塞任务队列、keepAlive 超时回收、拒绝策略，复现 `ThreadPoolExecutor` 语义。
+- **异步日志**：多生产者单消费者模型，有界队列满则丢弃（业务线程永不阻塞），支持同步 fallback。
+- **事件驱动网络**：Linux `epoll` / Windows `select` 跨平台封装，RAII `UdpSocket` 自动关闭。
+- **DNS 协议**：手写域名解码、A 记录解析、响应 / NXDOMAIN 构造；中继通过 Transaction ID 映射还原客户端查询。
+- **LRU 缓存**：本地中继表（插入序）+ 上游 DNS 响应缓存（LRU），命中即回，未命中透传上游。
 
 ## 练习内容
 
@@ -96,6 +108,14 @@ cmake --build build
 ./build/dns-server 8.8.8.8 dnsrelay.txt &
 ./build/tests/stress_network <并发线程数> <每线程查询数> <域名>
 ```
+
+## 已知限制与改进方向
+
+- 服务器暂未接入信号处理的优雅退出（`DnsServer::stop()` 已提供，接入 SIGINT/SIGTERM 即可）。
+- 中继 socket 依赖首次 `sendto` 自动绑定临时端口，`DnsRelay::init` 未显式 bind 与校验上游地址。
+- 域名解码对 DNS 压缩指针（`0xC0`）仅跳过不展开，复杂上游响应解析有限。
+- Windows 下用 `select` 替代 `epoll`，性能略低。
+- 部分容量为硬编码常量（线程池队列 50、查询 ID 映射表 128）。
 
 ## 免责声明
 

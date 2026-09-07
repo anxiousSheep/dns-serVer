@@ -15,7 +15,7 @@ class _Vector_base {
 public:
     using allocator_type = Alloc;
 
-    // _Vector_impl 继承 Alloc — 利用 EBCO，无状态分配器不占空间
+    // _Vector_impl 继承 Alloc 防止1字节捣乱
     struct _Vector_impl : public Alloc {
         T* start;           // 数组首元素
         T* finish;          // 尾元素 + 1
@@ -28,7 +28,7 @@ public:
             : Alloc(a), start(nullptr), finish(nullptr), end_of_storage(nullptr) {}
 
         // 交换所有状态（含分配器，通常分配器无状态所以是 no-op）
-        void _M_swap_data(_Vector_impl& other) noexcept {
+        void swap_data(_Vector_impl& other) noexcept {
             dns::swap(start, other.start);
             dns::swap(finish, other.finish);
             dns::swap(end_of_storage, other.end_of_storage);
@@ -39,12 +39,12 @@ protected:
     _Vector_impl impl;
 
     // 分配 n 个 T 的原始内存
-    T* _M_allocate(size_t n) {
+    T* allocate(size_t n) {
         return impl.allocate(n);
     }
 
     // 归还 n 个 T 的原始内存
-    void _M_deallocate(T* p, size_t n) {
+    void deallocate(T* p, size_t n) {
         if (p) impl.deallocate(p, n);
     }
 
@@ -54,13 +54,13 @@ public:
     explicit _Vector_base(const Alloc& a) noexcept : impl(a) {}
     _Vector_base(size_t n, const Alloc& a = Alloc())
         : impl(a) {
-        impl.start = _M_allocate(n);
+        impl.start = allocate(n);
         impl.finish = impl.start;
         impl.end_of_storage = impl.start + n;
     }
 
     ~_Vector_base() {
-        _M_deallocate(impl.start, capacity());
+        deallocate(impl.start, capacity());
     }
 
     // 禁止拷贝，允许移动
@@ -89,11 +89,12 @@ template<typename T, typename Alloc = Allocator<T>>
 class Vector : protected _Vector_base<T, Alloc> {
     using _Base = _Vector_base<T, Alloc>;
     using _Base::impl;
-    using _Base::_M_allocate;
-    using _Base::_M_deallocate;
+    using _Base::allocate;
+    using _Base::deallocate;
 
 public:
     // ---- 类型别名 ----
+    // 下次再也不写这些东西了
     using value_type        = T;
     using pointer           = T*;
     using const_pointer     = const T*;
@@ -111,13 +112,13 @@ public:
 
     explicit Vector(size_t count, const T& val = T())
         : _Base(count) {
-        _M_default_initialize_n(impl.start, count, val);
+        default_initialize_n(impl.start, count, val);
         impl.finish = impl.start + count;
     }
 
     Vector(const Vector& other)
         : _Base(other.size()) {
-        _M_copy_initialize(other.impl.start, other.impl.finish);
+        copy_initialize(other.impl.start, other.impl.finish);
         impl.finish = impl.start + other.size();
     }
 
@@ -127,7 +128,7 @@ public:
     }
 
     ~Vector() {
-        _M_destroy_range(impl.start, impl.finish);
+        destroy_range(impl.start, impl.finish);
     }
 
     Vector& operator=(Vector other) {
@@ -157,14 +158,14 @@ public:
     // ---- 修改 ----
     void push_back(const T& val) {
         if (impl.finish == impl.end_of_storage)
-            _M_realloc(capacity() == 0 ? 1 : capacity() * 2);
+            realloc(capacity() == 0 ? 1 : capacity() * 2);
         impl.construct(impl.finish, val);
         ++impl.finish;
     }
 
     void push_back(T&& val) {
         if (impl.finish == impl.end_of_storage)
-            _M_realloc(capacity() == 0 ? 1 : capacity() * 2);
+            realloc(capacity() == 0 ? 1 : capacity() * 2);
         impl.construct(impl.finish, move(val));
         ++impl.finish;
     }
@@ -172,7 +173,7 @@ public:
     template<typename... Args>
     void emplace_back(Args&&... args) {
         if (impl.finish == impl.end_of_storage)
-            _M_realloc(capacity() == 0 ? 1 : capacity() * 2);
+            realloc(capacity() == 0 ? 1 : capacity() * 2);
         ::new(static_cast<void*>(impl.finish)) T(forward<Args>(args)...);
         ++impl.finish;
     }
@@ -185,18 +186,18 @@ public:
     }
 
     void clear() {
-        _M_destroy_range(impl.start, impl.finish);
+        destroy_range(impl.start, impl.finish);
         impl.finish = impl.start;
     }
 
     void reserve(size_t newCap) {
         if (newCap > capacity())
-            _M_realloc(newCap);
+            realloc(newCap);
     }
 
     // ---- swap ----
     void swap(Vector& other) noexcept {
-        impl._M_swap_data(other.impl);
+        impl.swap_data(other.impl);
     }
 
     // ---- 分配器 ----
@@ -204,8 +205,8 @@ public:
 
 private:
     // 扩容核心：分配新内存 → 移动元素 → 归还旧内存
-    void _M_realloc(size_t newCap) {
-        T* newStart = _M_allocate(newCap);
+    void realloc(size_t newCap) {
+        T* newStart = allocate(newCap);
         T* newFinish = newStart;
 
         // 尝试移动旧元素到新内存
@@ -215,11 +216,11 @@ private:
         }
 
         // 析构旧元素
-        _M_destroy_range(impl.start, impl.finish);
+        destroy_range(impl.start, impl.finish);
 
         // 归还旧内存
         size_t oldCap = capacity();
-        _M_deallocate(impl.start, oldCap);
+        deallocate(impl.start, oldCap);
 
         // 更新三指针
         impl.start = newStart;
@@ -228,7 +229,7 @@ private:
     }
 
     // 析构 [first, last) 区间的元素
-    void _M_destroy_range(T* first, T* last) {
+    void destroy_range(T* first, T* last) {
         while (first != last) {
             impl.destroy(first);
             ++first;
@@ -236,7 +237,7 @@ private:
     }
 
     // 从 [src, src+size()) 拷贝构造到 [dst, ...)
-    void _M_copy_initialize(T* src, T* srcEnd) {
+    void copy_initialize(T* src, T* srcEnd) {
         T* dst = impl.start;
         while (src != srcEnd) {
             impl.construct(dst, *src);
@@ -246,7 +247,7 @@ private:
     }
 
     // 用 val 填充 [dst, dst+n)
-    void _M_default_initialize_n(T* dst, size_t n, const T& val) {
+    void default_initialize_n(T* dst, size_t n, const T& val) {
         for (size_t i = 0; i < n; ++i) {
             impl.construct(dst + i, val);
         }

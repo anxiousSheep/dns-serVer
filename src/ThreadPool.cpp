@@ -160,7 +160,7 @@ void* workerLoop(void* param) {
     }
     pthread_mutex_unlock(&pool->poolLock);
 
-    delete worker;  // Worker 在 _M_createWorker 中堆分配
+    delete worker;  // Worker 在 createWorker 中堆分配
     return nullptr;
 }
 
@@ -197,7 +197,7 @@ bool ThreadPool::execute(TaskFunction task, void* arg) {
 
     // 1. 核心线程未满 → 创建核心线程，直接交付任务（不经过队列）
     if ((int)workers.size() < corePoolSize) {
-        Worker* w = _M_createWorker(true, task, arg);
+        Worker* w = createWorker(true, task, arg);
         workers.push_back(w);
         ++numWorking;
         pthread_mutex_unlock(&poolLock);
@@ -215,7 +215,7 @@ bool ThreadPool::execute(TaskFunction task, void* arg) {
     pthread_mutex_lock(&poolLock);
 
     if ((int)workers.size() < maxPoolSize) {
-        Worker* w = _M_createWorker(false, task, arg);
+        Worker* w = createWorker(false, task, arg);
         workers.push_back(w);
         ++numWorking;
         pthread_mutex_unlock(&poolLock);
@@ -223,12 +223,13 @@ bool ThreadPool::execute(TaskFunction task, void* arg) {
     }
 
     // 4. 线程池满且队列满 → 拒绝
+    // 相当于报错后catch，模拟拒绝策略
     pthread_mutex_unlock(&poolLock);
     fprintf(stderr, "[ThreadPool] task rejected: pool and queue full\n");
     return false;
 }
 
-Worker* ThreadPool::_M_createWorker(bool isCore, TaskFunction firstTask, void* firstTaskArg) {
+Worker* ThreadPool::createWorker(bool isCore, TaskFunction firstTask, void* firstTaskArg) {
     Worker* worker = new Worker();
     worker->isCore = isCore;
     worker->spawnTimeSecs = time(nullptr);

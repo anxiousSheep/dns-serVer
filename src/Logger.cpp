@@ -102,7 +102,7 @@ void Logger::init(ThreadPool* pool, int queueCapacity) {
     ready = true;
 
     // 提交消费者任务
-    pool->execute(_M_consumerLoop, nullptr);
+    pool->execute(consumerLoop, nullptr);
 }
 
 void Logger::shutdown() {
@@ -113,6 +113,7 @@ void Logger::shutdown() {
     while (true) {
         LogEntry* entry = queue->dequeue();
         if (!entry) break;
+
         free(entry);
     }
 
@@ -121,7 +122,7 @@ void Logger::shutdown() {
     queue = nullptr;
 }
 
-Logger::LogEntry* Logger::_M_createEntry(int level, const char* fmt, va_list args) {
+Logger::LogEntry* Logger::createEntry(int level, const char* fmt, va_list args) {
     if (level > debugLevel_) return nullptr;
 
     LogEntry* entry = static_cast<LogEntry*>(malloc(sizeof(LogEntry)));
@@ -143,7 +144,7 @@ Logger::LogEntry* Logger::_M_createEntry(int level, const char* fmt, va_list arg
     return entry;
 }
 
-void Logger::_M_consumerLoop(void* /*arg*/) {
+void Logger::consumerLoop(void* /*arg*/) {
     while (true) {
         LogEntry* entry = queue->dequeue();
         if (!entry) break;   // shutdown 且队列空
@@ -155,11 +156,11 @@ void Logger::_M_consumerLoop(void* /*arg*/) {
     }
 }
 
-void Logger::_M_drain() {
+void Logger::drain() {
     // 由 consumerLoop 执行，外部一般不需要调用
 }
 
-void Logger::_M_logSync(int level, const char* fmt, va_list args) {
+void Logger::logSync(int level, const char* fmt, va_list args) {
     if (level > debugLevel_) return;
 
     time_t now = time(nullptr);
@@ -179,10 +180,10 @@ void Logger::error(const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
     if (ready && queue) {
-        LogEntry* entry = _M_createEntry(LOG_ERROR, fmt, args);
+        LogEntry* entry = createEntry(LOG_ERROR, fmt, args);
         if (entry) queue->enqueue(entry);
     } else {
-        _M_logSync(LOG_ERROR, fmt, args);
+        logSync(LOG_ERROR, fmt, args);
     }
     va_end(args);
 }
@@ -191,10 +192,10 @@ void Logger::info(const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
     if (ready && queue) {
-        LogEntry* entry = _M_createEntry(LOG_INFO, fmt, args);
+        LogEntry* entry = createEntry(LOG_INFO, fmt, args);
         if (entry) queue->enqueue(entry);
     } else {
-        _M_logSync(LOG_INFO, fmt, args);
+        logSync(LOG_INFO, fmt, args);
     }
     va_end(args);
 }
@@ -203,10 +204,10 @@ void Logger::debug(const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
     if (ready && queue) {
-        LogEntry* entry = _M_createEntry(LOG_DEBUG, fmt, args);
+        LogEntry* entry = createEntry(LOG_DEBUG, fmt, args);
         if (entry) queue->enqueue(entry);
     } else {
-        _M_logSync(LOG_DEBUG, fmt, args);
+        logSync(LOG_DEBUG, fmt, args);
     }
     va_end(args);
 }

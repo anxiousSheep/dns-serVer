@@ -116,8 +116,8 @@ private:
     pthread_mutex_t poolLock;
 
     // 内部方法
-    Worker* _M_createWorker(bool isCore, TaskFunction firstTask, void* firstTaskArg);
-    void    _M_workerExited();
+    Worker* createWorker(bool isCore, TaskFunction firstTask, void* firstTaskArg);
+    void    workerExited();
 };
 
 } // namespace dns

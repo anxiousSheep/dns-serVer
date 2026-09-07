@@ -24,52 +24,52 @@ public:
 
     // ---- 构造/析构 ----
     basic_string() noexcept {
-        _M_init_short();
+        init_short();
     }
 
     basic_string(const CharT* s) {
-        size_t len = _M_strlen(s);
+        size_t len = strlen(s);
         if (len <= SSO_CAP) {
-            _M_init_short();
-            _M_copy_chars(short_.buf, s, len);
-            _M_set_short_size(len);
+            init_short();
+            copy_chars(short_.buf, s, len);
+            set_short_size(len);
         } else {
             long_.capacity = len;
             long_.size = len;
-            long_.ptr = _M_alloc_long(len + 1);
-            _M_copy_chars(long_.ptr, s, len);
+            long_.ptr = alloc_long(len + 1);
+            copy_chars(long_.ptr, s, len);
             long_.ptr[len] = '\0';
         }
     }
 
     basic_string(const basic_string& other) {
-        if (other._M_is_short()) {
-            _M_init_short();
-            size_t sz = other._M_short_size();
-            _M_copy_chars(short_.buf, other.short_.buf, sz);
-            _M_set_short_size(sz);
+        if (other.is_short()) {
+            init_short();
+            size_t sz = other.short_size();
+            copy_chars(short_.buf, other.short_.buf, sz);
+            set_short_size(sz);
         } else {
             long_.capacity = other.long_.capacity;
             long_.size = other.long_.size;
-            long_.ptr = _M_alloc_long(other.long_.capacity + 1);
-            _M_copy_chars(long_.ptr, other.long_.ptr, other.long_.size);
+            long_.ptr = alloc_long(other.long_.capacity + 1);
+            copy_chars(long_.ptr, other.long_.ptr, other.long_.size);
             long_.ptr[other.long_.size] = '\0';
         }
     }
 
     basic_string(basic_string&& other) noexcept {
-        if (other._M_is_short()) {
-            _M_copy_chars(short_.buf, other.short_.buf, 16);
+        if (other.is_short()) {
+            copy_chars(short_.buf, other.short_.buf, 16);
         } else {
             long_.ptr = other.long_.ptr;
             long_.size = other.long_.size;
             long_.capacity = other.long_.capacity;
         }
-        other._M_init_short();
+        other.init_short();
     }
 
     ~basic_string() {
-        if (!_M_is_short()) {
+        if (!is_short()) {
             ::operator delete(long_.ptr);
         }
     }
@@ -91,13 +91,13 @@ public:
 
     // ---- 访问 ----
     const CharT* c_str() const {
-        return _M_is_short() ? short_.buf : long_.ptr;
+        return is_short() ? short_.buf : long_.ptr;
     }
 
     const CharT* data()  const { return c_str(); }
-    CharT*       data()        { return _M_is_short() ? short_.buf : long_.ptr; }
+    CharT*       data()        { return is_short() ? short_.buf : long_.ptr; }
 
-    size_t length() const { return _M_is_short() ? _M_short_size() : long_.size; }
+    size_t length() const { return is_short() ? short_size() : long_.size; }
     size_t size()   const { return length(); }
     bool   empty()  const { return length() == 0; }
 
@@ -112,11 +112,11 @@ public:
     // ---- 比较 ----
     bool operator==(const basic_string& other) const {
         if (length() != other.length()) return false;
-        return _M_strcmp(c_str(), other.c_str()) == 0;
+        return strcmp(c_str(), other.c_str()) == 0;
     }
 
     bool operator==(const CharT* s) const {
-        return _M_strcmp(c_str(), s) == 0;
+        return strcmp(c_str(), s) == 0;
     }
 
     bool operator!=(const basic_string& other) const { return !(*this == other); }
@@ -124,9 +124,9 @@ public:
 
     // ---- 操作 ----
     void clear() {
-        if (_M_is_short()) {
+        if (is_short()) {
             short_.buf[0] = '\0';
-            _M_set_short_size(0);
+            set_short_size(0);
         } else {
             long_.ptr[0] = '\0';
             long_.size = 0;
@@ -134,7 +134,7 @@ public:
     }
 
     basic_string& append(const CharT* s) {
-        return append(s, _M_strlen(s));
+        return append(s, strlen(s));
     }
 
     basic_string& append(const CharT* s, size_t n) {
@@ -142,12 +142,12 @@ public:
         size_t oldLen = length();
         size_t newLen = oldLen + n;
         if (newLen > capacity_impl()) {
-            _M_grow(newLen);
+            grow(newLen);
         }
         CharT* dst = data() + oldLen;
-        _M_copy_chars(dst, s, n);
+        copy_chars(dst, s, n);
         dst[n] = '\0';
-        _M_set_size(newLen);
+        set_size(newLen);
         return *this;
     }
 
@@ -155,31 +155,31 @@ public:
     basic_string& operator+=(const basic_string& s) { return append(s.c_str(), s.length()); }
 
     void reserve(size_t newCap) {
-        if (newCap > capacity_impl()) _M_grow(newCap);
+        if (newCap > capacity_impl()) grow(newCap);
     }
 
     void swap(basic_string& other) noexcept {
         // 简单 swap: 交换整个 union (最大成员拷来拷去)
         CharT tmpBuf[sizeof(_Long)];
         // 拷贝自己的状态到 tmp
-        if (_M_is_short()) {
-            _M_copy_chars(reinterpret_cast<CharT*>(tmpBuf), short_.buf, 16);
+        if (is_short()) {
+            copy_chars(reinterpret_cast<CharT*>(tmpBuf), short_.buf, 16);
         } else {
-            _M_copy_chars(reinterpret_cast<CharT*>(tmpBuf),
+            copy_chars(reinterpret_cast<CharT*>(tmpBuf),
                           reinterpret_cast<CharT*>(&long_), sizeof(_Long));
         }
         // other → this
-        if (other._M_is_short()) {
-            _M_copy_chars(short_.buf, other.short_.buf, 16);
+        if (other.is_short()) {
+            copy_chars(short_.buf, other.short_.buf, 16);
         } else {
-            _M_copy_chars(reinterpret_cast<CharT*>(&long_),
+            copy_chars(reinterpret_cast<CharT*>(&long_),
                           reinterpret_cast<CharT*>(&other.long_), sizeof(_Long));
         }
         // tmp → other
         if (*reinterpret_cast<unsigned char*>(tmpBuf + 15) & 1) {
-            _M_copy_chars(other.short_.buf, reinterpret_cast<CharT*>(tmpBuf), 16);
+            copy_chars(other.short_.buf, reinterpret_cast<CharT*>(tmpBuf), 16);
         } else {
-            _M_copy_chars(reinterpret_cast<CharT*>(&other.long_),
+            copy_chars(reinterpret_cast<CharT*>(&other.long_),
                           reinterpret_cast<CharT*>(tmpBuf), sizeof(_Long));
         }
     }
@@ -203,54 +203,54 @@ private:
     };
 
     // ---- 辅助函数 ----
-    bool _M_is_short() const {
+    bool is_short() const {
         return (reinterpret_cast<const unsigned char*>(short_.buf)[15] & 1) != 0;
     }
 
-    size_t _M_short_size() const {
+    size_t short_size() const {
         return SSO_CAP - (reinterpret_cast<const unsigned char*>(short_.buf)[15] >> 1);
     }
 
-    void _M_set_short_size(size_t n) {
+    void set_short_size(size_t n) {
         short_.buf[n] = '\0';  // ensure null termination
         reinterpret_cast<unsigned char*>(short_.buf)[15] =
             static_cast<unsigned char>(((SSO_CAP - n) << 1) | 1);
     }
 
-    void _M_init_short() {
+    void init_short() {
         short_.buf[0] = '\0';
-        _M_set_short_size(0);
+        set_short_size(0);
     }
 
     // 当前实际容量（短模式返回 SSO_CAP）
     size_t capacity_impl() const {
-        return _M_is_short() ? SSO_CAP : long_.capacity;
+        return is_short() ? SSO_CAP : long_.capacity;
     }
 
-    void _M_set_size(size_t n) {
-        if (_M_is_short()) {
-            _M_set_short_size(n);
+    void set_size(size_t n) {
+        if (is_short()) {
+            set_short_size(n);
         } else {
             long_.size = n;
         }
     }
 
-    CharT* _M_alloc_long(size_t n) {
+    CharT* alloc_long(size_t n) {
         return static_cast<CharT*>(::operator new(n * sizeof(CharT)));
     }
 
-    void _M_grow(size_t newCap) {
+    void grow(size_t newCap) {
         // 扩容策略：1.5x 或直接满足需求
         size_t curCap = capacity_impl();
         size_t target = (curCap > 0 && curCap * 3 / 2 > newCap) ? curCap * 3 / 2 : newCap;
 
-        CharT* newPtr = _M_alloc_long(target + 1);
+        CharT* newPtr = alloc_long(target + 1);
         size_t oldLen = length();
-        _M_copy_chars(newPtr, c_str(), oldLen);
+        copy_chars(newPtr, c_str(), oldLen);
         newPtr[oldLen] = '\0';
 
         // 释放旧内存
-        if (!_M_is_short()) {
+        if (!is_short()) {
             ::operator delete(long_.ptr);
         }
 
@@ -260,18 +260,18 @@ private:
         long_.capacity = target;
     }
 
-    static size_t _M_strlen(const CharT* s) {
+    static size_t strlen(const CharT* s) {
         size_t n = 0;
         while (*s++) ++n;
         return n;
     }
 
-    static int _M_strcmp(const CharT* a, const CharT* b) {
+    static int strcmp(const CharT* a, const CharT* b) {
         while (*a && *a == *b) { ++a; ++b; }
         return static_cast<int>(*a) - static_cast<int>(*b);
     }
 
-    static void _M_copy_chars(CharT* dst, const CharT* src, size_t n) {
+    static void copy_chars(CharT* dst, const CharT* src, size_t n) {
         for (size_t i = 0; i < n; ++i) dst[i] = src[i];
     }
 };

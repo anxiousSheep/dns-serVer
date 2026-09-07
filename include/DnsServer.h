@@ -73,24 +73,24 @@ private:
     pthread_mutex_t queryLogLock;
 
     // ===== 事件处理（主线程调用） =====
-    void _M_onClientQuery();
-    void _M_onRelayResponse();
-    void _M_onTimeout();
+    void onClientQuery();
+    void onRelayResponse();
+    void onTimeout();
 
     // ===== 业务逻辑（线程池调用） =====
-    void _M_handleDnsQuery(const uint8_t* buffer, int len, const InetAddress& client);
-    static void _M_handleDnsQueryEntry(void* arg);
+    void handleDnsQuery(const uint8_t* buffer, int len, const InetAddress& client);
+    static void handleDnsQueryEntry(void* arg);
 
     // ===== 辅助函数 =====
-    uint16_t _M_assignQueryId(uint32_t clientIp, uint16_t clientPort, uint16_t clientDnsId);
-    void _M_printQueryRecord(uint16_t serverId, const char* clientIp,
+    uint16_t assignQueryId(uint32_t clientIp, uint16_t clientPort, uint16_t clientDnsId);
+    void printQueryRecord(uint16_t serverId, const char* clientIp,
                              const char* domain, const char* qtypeStr,
                              const char* action, const char* result);
-    void _M_sendResponse(const uint8_t* data, int len, const InetAddress& to);
-    void _M_cleanupQueryIdMap();
+    void sendResponse(const uint8_t* data, int len, const InetAddress& to);
+    void cleanupQueryIdMap();
 
     // Query ID 映射表操作
-    int _M_findQueryIdEntry(uint32_t ip, uint16_t port, uint16_t dnsId);
+    int findQueryIdEntry(uint32_t ip, uint16_t port, uint16_t dnsId);
 };
 
 } // namespace dns

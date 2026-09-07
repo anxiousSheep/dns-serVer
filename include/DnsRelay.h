@@ -71,8 +71,8 @@ private:
     pthread_mutex_t lock;
 
     // 内部查找
-    int  _M_findFreeSlot();
-    int  _M_findByLocalId(uint16_t localId);
+    int  findFreeSlot();
+    int  findByLocalId(uint16_t localId);
 };
 
 } // namespace dns

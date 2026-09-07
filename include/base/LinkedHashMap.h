@@ -56,7 +56,7 @@ public:
     explicit LinkedHashMap(SizeType capacity, bool accessOrder = true)
         : capacity_(capacity), size_(0), accessOrder(accessOrder) {
         // 桶数为接近 2*capacity 的质数，降低冲突
-        bucketCount = _M_nextPrime(capacity * 2 + 1);
+        bucketCount = nextPrime(capacity * 2 + 1);
         buckets = new Node*[bucketCount];
         for (SizeType i = 0; i < bucketCount; ++i)
             buckets[i] = nullptr;
@@ -88,12 +88,12 @@ public:
     // 返回 value 指针（命中）或 nullptr（未命中）
     // LRU 模式下命中后节点移到链表头部
     V* get(const K& key) {
-        SizeType idx = _M_bucketIndex(key);
-        Node* node = _M_findInBucket(idx, key);
+        SizeType idx = bucketIndex(key);
+        Node* node = findInBucket(idx, key);
 
         if (node) {
             if (accessOrder)
-                _M_moveToHead(node);
+                moveToHead(node);
             return &node->value;
         }
         return nullptr;
@@ -102,39 +102,39 @@ public:
     // ---- 插入/更新 ----
     // key 存在则更新 value 并移到头部；不存在则插入，超出容量时自动淘汰尾部
     void put(const K& key, const V& value) {
-        SizeType idx = _M_bucketIndex(key);
-        Node* node = _M_findInBucket(idx, key);
+        SizeType idx = bucketIndex(key);
+        Node* node = findInBucket(idx, key);
 
         if (node) {
             // key 已存在：更新 value，移到 MRU 端
             node->value = value;
             if (accessOrder)
-                _M_moveToHead(node);
+                moveToHead(node);
         } else {
             // key 不存在：新建节点
             Node* newNode = new Node(key, value);
 
             // 插入桶链表（头插）
-            _M_insertToBucket(idx, newNode);
+            insertToBucket(idx, newNode);
 
             // 插入 LRU 链表头部
-            _M_linkToHead(newNode);
+            linkToHead(newNode);
             ++size_;
 
             // 容量检查 → 淘汰尾部
             if (size_ > capacity_)
-                _M_evictLRU();
+                evictLRU();
         }
     }
 
     // ---- 删除 ----
     bool remove(const K& key) {
-        SizeType idx = _M_bucketIndex(key);
-        Node* node = _M_findInBucket(idx, key);
+        SizeType idx = bucketIndex(key);
+        Node* node = findInBucket(idx, key);
         if (!node) return false;
 
-        _M_unlink(node);
-        _M_removeFromBucket(idx, node);
+        unlink(node);
+        removeFromBucket(idx, node);
         delete node;
         --size_;
         return true;
@@ -142,8 +142,8 @@ public:
 
     // ---- 查询 ----
     bool contains(const K& key) const {
-        SizeType idx = _M_bucketIndex(key);
-        return const_cast<LinkedHashMap*>(this)->_M_findInBucket(idx, key) != nullptr;
+        SizeType idx = bucketIndex(key);
+        return const_cast<LinkedHashMap*>(this)->findInBucket(idx, key) != nullptr;
     }
 
     SizeType size()     const { return size_; }
@@ -203,11 +203,11 @@ private:
     Node*     tail;   // LRU 哨兵（淘汰端）
 
     // ===== 哈希表操作 =====
-    SizeType _M_bucketIndex(const K& key) const {
+    SizeType bucketIndex(const K& key) const {
         return Hash<K>()(key) % bucketCount;
     }
 
-    Node* _M_findInBucket(SizeType idx, const K& key) {
+    Node* findInBucket(SizeType idx, const K& key) {
         for (Node* cur = buckets[idx]; cur; cur = cur->h_next) {
             if (cur->key == key)
                 return cur;
@@ -215,12 +215,12 @@ private:
         return nullptr;
     }
 
-    void _M_insertToBucket(SizeType idx, Node* node) {
+    void insertToBucket(SizeType idx, Node* node) {
         node->h_next = buckets[idx];
         buckets[idx] = node;
     }
 
-    void _M_removeFromBucket(SizeType idx, Node* target) {
+    void removeFromBucket(SizeType idx, Node* target) {
         Node** cur = &buckets[idx];
         while (*cur) {
             if (*cur == target) {
@@ -232,37 +232,37 @@ private:
     }
 
     // ===== LRU 双向链表操作 =====
-    void _M_linkToHead(Node* node) {
+    void linkToHead(Node* node) {
         node->next = head->next;
         node->prev = head;
         head->next->prev = node;
         head->next = node;
     }
 
-    void _M_unlink(Node* node) {
+    void unlink(Node* node) {
         node->prev->next = node->next;
         node->next->prev = node->prev;
     }
 
-    void _M_moveToHead(Node* node) {
-        _M_unlink(node);
-        _M_linkToHead(node);
+    void moveToHead(Node* node) {
+        unlink(node);
+        linkToHead(node);
     }
 
     // ===== LRU 淘汰 =====
-    void _M_evictLRU() {
+    void evictLRU() {
         Node* victim = tail->prev;
         if (victim == head) return;  // 链表为空（理论上不会）
 
-        SizeType idx = _M_bucketIndex(victim->key);
-        _M_unlink(victim);
-        _M_removeFromBucket(idx, victim);
+        SizeType idx = bucketIndex(victim->key);
+        unlink(victim);
+        removeFromBucket(idx, victim);
         delete victim;
         --size_;
     }
 
     // ===== 质数生成 =====
-    static bool _M_isPrime(SizeType n) {
+    static bool isPrime(SizeType n) {
         if (n <= 1) return false;
         if (n <= 3) return true;
         if (n % 2 == 0 || n % 3 == 0) return false;
@@ -271,8 +271,8 @@ private:
         return true;
     }
 
-    static SizeType _M_nextPrime(SizeType n) {
-        while (!_M_isPrime(n)) ++n;
+    static SizeType nextPrime(SizeType n) {
+        while (!isPrime(n)) ++n;
         return n;
     }
 };

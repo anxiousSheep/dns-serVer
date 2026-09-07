@@ -27,9 +27,9 @@ struct DnsQueryTask {
 
 DnsServer::DnsServer(const Config& config)
     : config(config),
-      threadPool(4, 8, 60),                        // core=4, max=8, keepAlive=60s
-      localCache(config.filename == String("dnsrelay.txt") ? 1024 : 1024, false),  // 插入序
-      dnsCache(256, true),                          // LRU 序
+      threadPool(4, 8, 60), // core=4, max=8, keepAlive=60s
+      localCache(1024, false), // 不开启LRU
+      dnsCache(256, true), // LRU 序
       stop_(false),
       nextQueryId(1)
 {
@@ -116,16 +116,16 @@ void DnsServer::run() {
 
         for (auto& ev : events) {
             if (ev.fd == serverSocket.fd()) {
-                _M_onClientQuery();
+                onClientQuery();
             } else if (ev.fd == relay.relayFd()) {
-                _M_onRelayResponse();
+                onRelayResponse();
             }
             if (stop_) break;
         }
 
         // 超时 → 定时清理
         if (events.empty()) {
-            _M_onTimeout();
+            onTimeout();
         }
     }
 }
@@ -137,7 +137,7 @@ void DnsServer::stop() {
 
 // ==================== 事件处理 ====================
 
-void DnsServer::_M_onClientQuery() {
+void DnsServer::onClientQuery() {
     DnsQueryTask* task = new DnsQueryTask();
     task->server = this;
 
@@ -152,13 +152,13 @@ void DnsServer::_M_onClientQuery() {
 
     Logger::debug("Received %d bytes from client", len);
 
-    if (!threadPool.execute(_M_handleDnsQueryEntry, task)) {
+    if (!threadPool.execute(handleDnsQueryEntry, task)) {
         Logger::error("ThreadPool::execute failed, dropping query");
         delete task;
     }
 }
 
-void DnsServer::_M_onRelayResponse() {
+void DnsServer::onRelayResponse() {
     uint8_t response[512];
     InetAddress from;
     int respLen = relay.recvFromUpstream(response, sizeof(response), from);
@@ -167,8 +167,7 @@ void DnsServer::_M_onRelayResponse() {
     if (respLen < 2) return;
 
     // 通过中继管理器处理
-    // Note: 此处借用 serverSocket 接收的是上游响应
-    // 实际应通过 relay socket 接收，这里作为简化版处理
+    // relay socket 接收
     PendingQuery pq = relay.processResponse(response, &respLen);
 
     if (!pq.used) return;
@@ -192,43 +191,43 @@ void DnsServer::_M_onRelayResponse() {
             }
 
             // 透传上游响应给客户端
-            _M_sendResponse(response, respLen, pq.clientAddr);
+            sendResponse(response, respLen, pq.clientAddr);
 
-            uint16_t serverId = _M_assignQueryId(pq.clientAddr.ip, pq.clientAddr.port, pq.originalId);
-            _M_printQueryRecord(serverId, clientIpStr, pq.domainName.c_str(),
+            uint16_t serverId = assignQueryId(pq.clientAddr.ip, pq.clientAddr.port, pq.originalId);
+            printQueryRecord(serverId, clientIpStr, pq.domainName.c_str(),
                                "A", "Relay", resultStr);
         } else {
-            uint16_t serverId = _M_assignQueryId(pq.clientAddr.ip, pq.clientAddr.port, pq.originalId);
-            _M_printQueryRecord(serverId, clientIpStr, pq.domainName.c_str(),
+            uint16_t serverId = assignQueryId(pq.clientAddr.ip, pq.clientAddr.port, pq.originalId);
+            printQueryRecord(serverId, clientIpStr, pq.domainName.c_str(),
                                "A", "Relay", "ParseFail");
         }
     } else {
         // 非 A 记录：原样透传
-        _M_sendResponse(response, respLen, pq.clientAddr);
+        sendResponse(response, respLen, pq.clientAddr);
 
-        uint16_t serverId = _M_assignQueryId(pq.clientAddr.ip, pq.clientAddr.port, pq.originalId);
-        _M_printQueryRecord(serverId, clientIpStr, pq.domainName.c_str(),
+        uint16_t serverId = assignQueryId(pq.clientAddr.ip, pq.clientAddr.port, pq.originalId);
+        printQueryRecord(serverId, clientIpStr, pq.domainName.c_str(),
                            pq.qtype == 28 ? "AAAA" : "OTHER", "Relay", "FwdOK");
     }
 }
 
-void DnsServer::_M_onTimeout() {
-    _M_cleanupQueryIdMap();
+void DnsServer::onTimeout() {
+    cleanupQueryIdMap();
     relay.cleanupStale();
 }
 
 // ==================== 业务逻辑 ====================
 
-void DnsServer::_M_handleDnsQueryEntry(void* arg) {
+void DnsServer::handleDnsQueryEntry(void* arg) {
     DnsQueryTask* task = static_cast<DnsQueryTask*>(arg);
-    task->server->_M_handleDnsQuery(task->buffer, task->len, task->clientAddr);
+    task->server->handleDnsQuery(task->buffer, task->len, task->clientAddr);
     delete task;
 }
 
-void DnsServer::_M_handleDnsQuery(const uint8_t* buffer, int len, const InetAddress& client) {
+void DnsServer::handleDnsQuery(const uint8_t* buffer, int len, const InetAddress& client) {
     // 分配查询 ID
     uint16_t clientDnsId = (len >= 2) ? ntohs(*(uint16_t*)buffer) : 0;
-    uint16_t serverId = _M_assignQueryId(client.ip, client.port, clientDnsId);
+    uint16_t serverId = assignQueryId(client.ip, client.port, clientDnsId);
 
     String clientIpStr = client.toString();
     // 截取端口部分（简化处理）
@@ -279,10 +278,10 @@ void DnsServer::_M_handleDnsQuery(const uint8_t* buffer, int len, const InetAddr
 
         respLen = DnsProtocol::buildResponse(buffer, len, *localIps, response, sizeof(response));
         if (respLen > 0) {
-            _M_sendResponse(response, respLen, client);
-            _M_printQueryRecord(serverId, ipOnly, domain.c_str(), "A", action, resultStr);
+            sendResponse(response, respLen, client);
+            printQueryRecord(serverId, ipOnly, domain.c_str(), "A", action, resultStr);
         } else {
-            _M_printQueryRecord(serverId, ipOnly, domain.c_str(), "A", action, "BuildFail");
+            printQueryRecord(serverId, ipOnly, domain.c_str(), "A", action, "BuildFail");
         }
         return;
     }
@@ -298,8 +297,8 @@ void DnsServer::_M_handleDnsQuery(const uint8_t* buffer, int len, const InetAddr
 
         respLen = DnsProtocol::buildResponse(buffer, len, *cachedIps, response, sizeof(response));
         if (respLen > 0) {
-            _M_sendResponse(response, respLen, client);
-            _M_printQueryRecord(serverId, ipOnly, domain.c_str(), "A", "Local", resultStr);
+            sendResponse(response, respLen, client);
+            printQueryRecord(serverId, ipOnly, domain.c_str(), "A", "Local", resultStr);
         }
         return;
     }
@@ -311,15 +310,15 @@ void DnsServer::_M_handleDnsQuery(const uint8_t* buffer, int len, const InetAddr
         Logger::error("Relay submit failed for '%s', returning NXDOMAIN", domain.c_str());
         respLen = DnsProtocol::buildNxdomain(buffer, len, response, sizeof(response));
         if (respLen > 0) {
-            _M_sendResponse(response, respLen, client);
+            sendResponse(response, respLen, client);
         }
-        _M_printQueryRecord(serverId, ipOnly, domain.c_str(), "A", "Relay", "SubmitFail");
+        printQueryRecord(serverId, ipOnly, domain.c_str(), "A", "Relay", "SubmitFail");
     }
 }
 
 // ==================== 辅助函数 ====================
 
-uint16_t DnsServer::_M_assignQueryId(uint32_t clientIp, uint16_t clientPort, uint16_t clientDnsId) {
+uint16_t DnsServer::assignQueryId(uint32_t clientIp, uint16_t clientPort, uint16_t clientDnsId) {
     pthread_mutex_lock(&queryIdLock);
     time_t now = time(nullptr);
 
@@ -372,7 +371,7 @@ uint16_t DnsServer::_M_assignQueryId(uint32_t clientIp, uint16_t clientPort, uin
     return id;
 }
 
-void DnsServer::_M_cleanupQueryIdMap() {
+void DnsServer::cleanupQueryIdMap() {
     pthread_mutex_lock(&queryIdLock);
     time_t now = time(nullptr);
     for (int i = 0; i < QUERY_ID_MAP_SIZE; i++) {
@@ -383,7 +382,7 @@ void DnsServer::_M_cleanupQueryIdMap() {
     pthread_mutex_unlock(&queryIdLock);
 }
 
-void DnsServer::_M_printQueryRecord(uint16_t serverId, const char* clientIp,
+void DnsServer::printQueryRecord(uint16_t serverId, const char* clientIp,
                                      const char* domain, const char* qtypeStr,
                                      const char* action, const char* result) {
     time_t now = time(nullptr);
@@ -406,7 +405,7 @@ void DnsServer::_M_printQueryRecord(uint16_t serverId, const char* clientIp,
     pthread_mutex_unlock(&queryLogLock);
 }
 
-void DnsServer::_M_sendResponse(const uint8_t* data, int len, const InetAddress& to) {
+void DnsServer::sendResponse(const uint8_t* data, int len, const InetAddress& to) {
     pthread_mutex_lock(&sendLock);
     int sent = serverSocket.sendto(data, len, to);
     pthread_mutex_unlock(&sendLock);

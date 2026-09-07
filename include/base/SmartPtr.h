@@ -101,13 +101,13 @@ public:
 
     // 5. 拷贝赋值 (copy-and-swap, 隐含移动赋值)
     SharedPtr& operator=(SharedPtr other) noexcept {
-        _M_swap(other);
+        swap(other);
         return *this;
     }
 
     // 6. 析构
     ~SharedPtr() {
-        _M_release();
+        release();
     }
 
     T&   operator*()  const { return *ptr; }
@@ -121,15 +121,18 @@ public:
     explicit operator bool() const noexcept { return ptr != nullptr; }
 
     void reset(T* p = nullptr) {
-        _M_release();
+        release();
         ptr = p;
         refCount = p ? new int(1) : nullptr;
     }
 
-    void swap(SharedPtr& other) noexcept { _M_swap(other); }
+    void swap(SharedPtr& other) noexcept {
+        dns::swap(ptr, other.ptr);
+        dns::swap(refCount, other.refCount);
+    }
 
 private:
-    void _M_release() {
+    void release() {
         if (refCount) {
             --(*refCount);
             if (*refCount == 0) {
@@ -139,11 +142,6 @@ private:
         }
         ptr = nullptr;
         refCount = nullptr;
-    }
-
-    void _M_swap(SharedPtr& other) noexcept {
-        dns::swap(ptr, other.ptr);
-        dns::swap(refCount, other.refCount);
     }
 };
 
